@@ -89,6 +89,9 @@ async function run(): Promise<number> {
           var getTestedBy = getBoolean(settings.getTestedBy);
           var wiqlFromTarget = settings.wiqlFromTarget;
 
+          var includeFiles = settings.includeFiles;
+          var excludeFiles = settings.excludeFiles;
+
           if (payloadFile && payloadFile.length > 0 && fs.existsSync(payloadFile)) {
             console.log(`Running the tester against a local payload JSON file`);
             var payload = JSON.parse(fs.readFileSync(payloadFile).toString());
@@ -176,7 +179,9 @@ async function run(): Promise<number> {
               wiqlWhereClause,
               getPRDetails,
               getTestedBy,
-              wiqlFromTarget);
+              wiqlFromTarget,
+              includeFiles,
+              excludeFiles);
           }
 
         } else {

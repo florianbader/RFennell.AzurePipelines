@@ -42,6 +42,12 @@
     "getPRDetails": "true",
     "getTestedBy": "true",
 
+    "includeFiles": [
+      "/projects/project2/**/*"
+    ],
+    "excludeFiles": [
+    ],
+
     "maxRetries": "3",
     "pauseTime": "5000",
 

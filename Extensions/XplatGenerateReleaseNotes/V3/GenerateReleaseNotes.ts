@@ -50,6 +50,8 @@ async function run(): Promise<number>  {
             var getPRDetails = tl.getBoolInput("getPRDetails");
             var getTestedBy = tl.getBoolInput("getTestedBy");
             var wiqlFromTarget = tl.getInput("wiqlFromTarget");
+            var includeFiles = tl.getDelimitedInput("includeFiles", "\n", false);
+            var excludeFiles = tl.getDelimitedInput("excludeFiles", "\n", false);
 
             var maxRetries = parseInt(tl.getInput("maxRetries"));
 
@@ -100,7 +102,9 @@ async function run(): Promise<number>  {
                 wiqlWhereClause,
                 getPRDetails,
                 getTestedBy,
-                wiqlFromTarget
+                wiqlFromTarget,
+                includeFiles,
+                excludeFiles
                 );
 
         } catch (err) {

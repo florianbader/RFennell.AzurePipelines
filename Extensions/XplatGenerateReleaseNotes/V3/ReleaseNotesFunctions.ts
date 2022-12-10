@@ -1287,7 +1287,9 @@ export async function generateReleaseNotes(
     wiqlWhereClause: string,
     getPRDetails: boolean,
     getTestedBy: boolean,
-    wiqlFromTarget: string
+    wiqlFromTarget: string,
+    includeFiles: string[],
+    excludeFiles: string[]
     ): Promise<number> {
         return new Promise<number>(async (resolve, reject) => {
 
@@ -1308,6 +1310,8 @@ export async function generateReleaseNotes(
                 // a check to make sure we don't get a null
                 gitHubPat = "";
             }
+
+            const hasFilesFilter = includeFiles?.length || excludeFiles?.length;
 
             agentApi.logInfo(`Creating Azure DevOps API connections for ${tpcUri} with 'allowRetries' set to '${maxRetries > 0}' and 'maxRetries' count to '${maxRetries}'`);
             const credentialHandler = getCredentialHandler(pat, oath);
@@ -1903,6 +1907,12 @@ export async function generateReleaseNotes(
             agentApi.logInfo("Removing duplicate Commits from master list");
             globalCommits = removeDuplicates(globalCommits);
 
+            // filtering commits
+            if (hasFilesFilter) {
+                agentApi.logInfo("Filtering commits by included and excluded files");
+                globalCommits = filterCommits(includeFiles, excludeFiles, globalCommits);
+            }
+
             let expandedGlobalCommits = await expandTruncatedCommitMessages(organisationWebApi, globalCommits, gitHubPat, bitbucketUser, bitbucketSecret);
 
             if (!expandedGlobalCommits || expandedGlobalCommits.length !== globalCommits.length) {
@@ -1929,6 +1939,11 @@ export async function generateReleaseNotes(
 
             // get an array of workitem ids
             fullWorkItems = await getFullWorkItemDetails(workItemTrackingApi, globalWorkItems);
+
+            if (hasFilesFilter) {
+                agentApi.logInfo("Filtering work items based on commits");
+                fullWorkItems = filterWorkItems(globalCommits, fullWorkItems);
+            }
 
             if (getParentsAndChildren) {
                 agentApi.logInfo("Getting direct parents and children of WorkItems");
@@ -2215,6 +2230,63 @@ function removeDuplicates(array: any[]): any[] {
     t.id === thing.id
     )));
     return array;
+}
+
+function filterCommits(includeFiles: string[], excludeFiles: string[], commits: Change[]) {
+    const patterns = [
+        ...includeFiles,
+        ...excludeFiles.map(pattern => `!${pattern}`)
+    ];
+    const filteredCommits: Change[] = [];
+
+    for (const commit of commits) {
+        if (commit.type !== "TfsGit") {
+            filteredCommits.push(commit);
+            continue;
+        }
+
+        const changes = <any[]>(<any>commit).changes;
+        const matchesPaths = new Set<string>(tl.match(changes.map(change => change.item.path), patterns));
+
+        const filteredChanges = changes.filter(change => {
+            const path = change.item.path;
+            const isMatch = matchesPaths.has(path);
+            return isMatch;
+        });
+
+        if (filteredChanges == null || filteredChanges.length === 0) {
+            // ignore commits without any changes
+            agentApi.logDebug(`Ignoring commit ${commit.id} because it has no changes or all changes were filtered.`);
+            continue;
+        }
+
+        filteredCommits.push(commit);
+    }
+
+    return filteredCommits;
+}
+
+function filterWorkItems(commits: Change[], workItems: WorkItem[]) {
+    const filteredWorkItems: WorkItem[] = [];
+
+    for (const workItem of workItems) {
+        const containsCommit = workItem.relations.some(relation => {
+            if (relation.attributes.name !== "Fixed in Commit") {
+                return false;
+            }
+
+            return commits.some(commit => relation.url.endsWith(commit.id));
+        });
+
+        if (!containsCommit) {
+            agentApi.logInfo(`Ignoring work item ${workItem.id} because there was no related commit assigned to it`);
+            continue;
+        }
+
+        filteredWorkItems.push(workItem);
+    }
+
+    return filteredWorkItems;
 }
 
 async function enrichConsumedArtifacts(
